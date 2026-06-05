@@ -88,7 +88,7 @@ When deploying behind a proxy or on a public host, set `app.base-url` to the pub
 
 ```
 src/
-  UrlShortenerApplication.java     # Spring Boot entry point
+  app.UrlShortenerApplication.java     # Spring Boot entry point
   controller/
     UrlShortenerController.java    # REST API (/api/shorten)
     RedirectController.java        # Short-link redirects (GET /{code})

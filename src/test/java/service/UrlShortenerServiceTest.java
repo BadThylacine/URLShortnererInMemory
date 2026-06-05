@@ -29,8 +29,6 @@ class UrlShortenerServiceTest {
         service = new UrlShortenerService("http://localhost:8080");
     }
 
-    // --- shortenUrl ---
-
     @Nested
     class ShortenUrl {
 

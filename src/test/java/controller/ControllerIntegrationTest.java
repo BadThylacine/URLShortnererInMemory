@@ -1,5 +1,6 @@
-package controller;
+package test.java.controller;
 
+import app.UrlShortenerApplication;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Nested;
