@@ -3,8 +3,8 @@ package service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,14 +35,23 @@ public class UrlShortenerService {
             return "Error: Invalid input";
         }
 
+        // Fast-path: if already present, return immediately
         String existingCode = urlToCode.get(originalUrl);
         if (existingCode != null) {
             return baseUrl + existingCode;
         }
 
-        String code = generateCode();
-        codeToUrl.put(code, originalUrl);
-        urlToCode.put(originalUrl, code);
+        // Ensure only one code is generated for a given originalUrl under concurrency
+        String code = urlToCode.computeIfAbsent(originalUrl, key -> {
+            String newCode;
+            // generate a code and ensure there is no collision in codeToUrl
+            do {
+                newCode = generateCode();
+                // try to reserve the code; if someone else took it, retry
+            } while (codeToUrl.putIfAbsent(newCode, key) != null);
+            return newCode;
+        });
+
         return baseUrl + code;
     }
 
@@ -82,11 +91,15 @@ public class UrlShortenerService {
     }
 
     private boolean isValidUrl(String fullUrl) {
+        if (fullUrl == null || fullUrl.isBlank()) return false;
         try {
-            URL url = new URL(fullUrl);
-            String scheme = url.getProtocol();
-            return scheme.equals("http") || scheme.equals("https");
-        } catch (MalformedURLException e) {
+            URI uri = new URI(fullUrl.trim());
+            String scheme = uri.getScheme();
+            if (scheme == null) return false;
+            if (!scheme.equals("http") && !scheme.equals("https")) return false;
+            String host = uri.getHost();
+            return host != null && !host.isBlank();
+        } catch (URISyntaxException e) {
             return false;
         }
     }
