@@ -1,59 +1,98 @@
 package service;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
 
-//Functional class which provides methods to shorten the original URL
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+@Service
 public class UrlShortenerService {
 
-    //HashMap to store URL in-memory and a random generator
-    private final Map<String, String> urlMap = new HashMap<>();
-    private final Random random = new Random();
+    public static final int CODE_LENGTH = 4;
+    private static final String CHARS =
+            "abcdefghijklmnopqrstuvwxyz"
+                    + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                    + "0123456789"
+                    + "-._~";
+    private static final int BASE = CHARS.length(); // 66
 
-    // A helper method to extract the base URL from a given URL
-    private String getBaseUrl(String fullUrl) {
-        try {
-            URL url = new URL(fullUrl);
-            return url.getProtocol() + "://" + url.getHost() + "/";
-        } catch (MalformedURLException e) {
-            return "";
-        }
+    private final String baseUrl;
+    private final Map<String, String> codeToUrl = new ConcurrentHashMap<>();
+    private final Map<String, String> urlToCode = new ConcurrentHashMap<>();
+    private final AtomicLong counter = new AtomicLong(1);
+
+    public UrlShortenerService(@Value("${app.base-url:http://localhost:8080}") String baseUrl) {
+        this.baseUrl = normalizeBaseUrl(baseUrl);
     }
 
     public String shortenUrl(String originalUrl) {
-        String code = generateCode();
-        String baseUrl = getBaseUrl(originalUrl);
-
-        if (baseUrl.isEmpty()) {
+        if (!isValidUrl(originalUrl)) {
             return "Error: Invalid input";
         }
 
-        String shortUrl = baseUrl + code;
-//        urlMap.put(code, new UrlMapping(originalUrl, shortUrl));
-        urlMap.put(shortUrl, originalUrl);
-        return shortUrl;
+        String existingCode = urlToCode.get(originalUrl);
+        if (existingCode != null) {
+            return baseUrl + existingCode;
+        }
+
+        String code = generateCode();
+        codeToUrl.put(code, originalUrl);
+        urlToCode.put(originalUrl, code);
+        return baseUrl + code;
     }
 
-    public String expandUrl(String shortUrl) {
-        return urlMap.get(shortUrl);
-    }
-
-    public Map<String, String> getAllUrls() {
-        return urlMap;
+    public String resolveByCode(String code) {
+        if (!isValidCode(code)) return null;
+        return codeToUrl.get(code);
     }
 
     private String generateCode() {
-        String chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        long id = counter.getAndIncrement();
+        String code = toBase62(id);
+
+        // Pad with leading 'a' (zero in Base62) to ensure fixed length
+        while (code.length() < CODE_LENGTH) {
+            code = CHARS.charAt(0) + code;
+        }
+        return code;
+    }
+
+    private String toBase62(long id) {
+        if (id == 0) return String.valueOf(CHARS.charAt(0));
+
         StringBuilder code = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            code.append(chars.charAt(random.nextInt(chars.length())));
+        while (id > 0) {
+            code.append(CHARS.charAt((int) (id % BASE)));
+            id /= BASE;
         }
-        while (urlMap.containsKey(code.toString())) {
-            code.setCharAt(random.nextInt(6), chars.charAt(random.nextInt(chars.length())));
+        return code.reverse().toString();
+    }
+
+    private boolean isValidCode(String code) {
+        if (code == null || code.length() != CODE_LENGTH) return false;
+        for (char c : code.toCharArray()) {
+            if (CHARS.indexOf(c) < 0) return false;
         }
-        return code.toString();
+        return true;
+    }
+
+    private boolean isValidUrl(String fullUrl) {
+        try {
+            URL url = new URL(fullUrl);
+            String scheme = url.getProtocol();
+            return scheme.equals("http") || scheme.equals("https");
+        } catch (MalformedURLException e) {
+            return false;
+        }
+    }
+
+    private static String normalizeBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) return "http://localhost:8080/";
+        return baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
     }
 }

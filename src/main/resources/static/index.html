@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f4f6f8;
+            color: #1a1a1a;
+        }
+
+        main {
+            background: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            width: 100%;
+            max-width: 32rem;
+        }
+
+        h1 {
+            margin: 0 0 0.25rem;
+            font-size: 1.5rem;
+        }
+
+        p {
+            margin: 0 0 1.5rem;
+            color: #555;
+            font-size: 0.95rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        input[type="url"],
+        input[type="text"] {
+            width: 100%;
+            padding: 0.65rem 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        input[type="url"]:focus {
+            outline: 2px solid #2563eb;
+            border-color: #2563eb;
+        }
+
+        button {
+            margin-top: 1rem;
+            width: 100%;
+            padding: 0.7rem;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        #result {
+            margin-top: 1.25rem;
+            padding: 0.75rem;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            word-break: break-all;
+            display: none;
+        }
+
+        #result.success {
+            display: block;
+            background: #ecfdf5;
+            border: 1px solid #6ee7b7;
+        }
+
+        #result.error {
+            display: block;
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+        }
+
+        #result a {
+            color: #2563eb;
+        }
+
+        #short-output {
+            display: none;
+            margin-top: 0.75rem;
+        }
+
+        #short-url-input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            background: #f9fafb;
+        }
+
+        #copy-btn {
+            margin-top: 0.5rem;
+            width: 100%;
+            padding: 0.6rem;
+            background: #10b981;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        #copy-btn:hover {
+            background: #059669;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>URL Shortener</h1>
+    <p>Enter a full URL to get a shortened link. Opening the short link redirects to the original URL.</p>
+
+    <form id="shorten-form">
+        <label for="url">Full URL</label>
+        <input type="url" id="url" name="url" placeholder="https://example.com/page" required>
+        <button type="submit" id="submit-btn">Shorten URL</button>
+    </form>
+
+    <div id="result" role="status" aria-live="polite"></div>
+
+    <div id="short-output">
+        <input id="short-url-input" type="text" readonly />
+        <button id="copy-btn">Copy short URL</button>
+    </div>
+</main>
+
+<script>
+    const form = document.getElementById('shorten-form');
+    const result = document.getElementById('result');
+    const shortOutput = document.getElementById('short-output');
+    const shortInput = document.getElementById('short-url-input');
+    const copyBtn = document.getElementById('copy-btn');
+    const submitBtn = document.getElementById('submit-btn');
+
+    copyBtn.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(shortInput.value);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => copyBtn.textContent = 'Copy short URL', 2000);
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const url = document.getElementById('url').value.trim();
+
+        result.className = '';
+        result.style.display = 'none';
+        shortOutput.style.display = 'none';
+        submitBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/shorten', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                result.textContent = data.message || 'Something went wrong.';
+                result.className = 'error';
+                return;
+            }
+
+            shortInput.value = data.shortUrl;
+            shortOutput.style.display = 'block';
+            result.innerHTML = `Short URL created: <a href="${data.shortUrl}" target="_blank" rel="noopener noreferrer">${data.shortUrl}</a>`;
+            result.className = 'success';
+        } catch (err) {
+            result.textContent = 'Could not reach the server. Is the application running?';
+            result.className = 'error';
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,9 +1,14 @@
 package controller;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import service.UrlShortenerService;
 
-import java.util.Map;
-
+@RestController
+@RequestMapping("/api")
 public class UrlShortenerController {
     private final UrlShortenerService service;
 
@@ -15,11 +20,17 @@ public class UrlShortenerController {
         return service.shortenUrl(originalUrl);
     }
 
-    public String getOriginalUrl(String shortUrl) {
-        return service.expandUrl(shortUrl);
-    }
+    @PostMapping("/shorten")
+    public ResponseEntity<?> shortenUrl(@RequestBody ShortenRequest request) {
+        String url = request.url();
+        if (url == null || url.isBlank()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("URL is required"));
+        }
 
-    public Map<String, String> getAllData() {
-        return service.getAllUrls();
+        String shortUrl = createShortUrl(url.trim());
+        if (shortUrl.startsWith("Error:")) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(shortUrl.substring(7).trim()));
+        }
+        return ResponseEntity.ok(new ShortenResponse(shortUrl));
     }
 }

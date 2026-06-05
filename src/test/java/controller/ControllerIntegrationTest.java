@@ -2,11 +2,14 @@ package controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import app.UrlShortenerApplication;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -16,9 +19,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(classes = UrlShortenerApplication.class)
 @AutoConfigureMockMvc
-public class ControllerIntegrationTest {
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+class ControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -26,75 +30,150 @@ public class ControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Test
-    void shorten_validUrl_returnsShortenResponse() throws Exception {
-        String payload = "{\"url\": \"https://example.com/page\"}";
+    // --- POST /api/shorten ---
 
-        MvcResult result = mockMvc.perform(post("/api/shorten")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
+    @Nested
+    class ShortenEndpoint {
+
+        @Test
+        void validUrl_returns200WithShortUrl() throws Exception {
+            MvcResult result = performShorten("https://example.com/page")
+                    .andExpect(status().isOk())
+                    .andReturn();
+
+            JsonNode body = parseBody(result);
+            assertThat(body.has("shortUrl")).isTrue();
+
+            String code = extractCode(body.get("shortUrl").asText());
+            assertThat(code).hasSize(4);
+            assertThat(code).matches("[a-zA-Z0-9\\-._~]{4}");
+        }
+
+        @Test
+        void missingUrlField_returns400WithMessage() throws Exception {
+            MvcResult result = mockMvc.perform(post("/api/shorten")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            JsonNode body = parseBody(result);
+            assertThat(body.get("message").asText()).isEqualTo("URL is required");
+        }
+
+        @Test
+        void invalidUrl_returns400WithMessage() throws Exception {
+            MvcResult result = performShorten("not-a-url")
+                    .andExpect(status().isBadRequest())
+                    .andReturn();
+
+            JsonNode body = parseBody(result);
+            assertThat(body.get("message").asText()).isEqualTo("Invalid input");
+        }
+
+        @Test
+        void javascriptScheme_returns400() throws Exception {
+            performShorten("javascript:alert(1)")
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void ftpScheme_returns400() throws Exception {
+            performShorten("ftp://example.com")
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void emptyBody_returns400() throws Exception {
+            mockMvc.perform(post("/api/shorten")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(""))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void sameUrlTwice_returnsSameShortUrl() throws Exception {
+            String payload = "https://example.com/page";
+
+            MvcResult first = performShorten(payload)
+                    .andExpect(status().isOk())
+                    .andReturn();
+            MvcResult second = performShorten(payload)
+                    .andExpect(status().isOk())
+                    .andReturn();
+
+            String firstUrl = parseBody(first).get("shortUrl").asText();
+            String secondUrl = parseBody(second).get("shortUrl").asText();
+            assertThat(firstUrl).isEqualTo(secondUrl);
+        }
+    }
+
+    // --- GET /{code} ---
+
+    @Nested
+    class RedirectEndpoint {
+
+        @Test
+        void knownCode_returns302WithLocationHeader() throws Exception {
+            String original = "https://example.com/page";
+            String code = shortenAndExtractCode(original);
+
+            mockMvc.perform(get("/" + code))
+                    .andExpect(status().isFound())
+                    .andExpect(header().string("Location", original));
+        }
+
+        @Test
+        void knownCode_locationPreservesQueryParams() throws Exception {
+            String original = "https://example.com/search?q=hello&lang=en";
+            String code = shortenAndExtractCode(original);
+
+            mockMvc.perform(get("/" + code))
+                    .andExpect(status().isFound())
+                    .andExpect(header().string("Location", original));
+        }
+
+        @Test
+        void unknownCode_returns404() throws Exception {
+            mockMvc.perform(get("/zzzz"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        void tooLongCode_returns404() throws Exception {
+            mockMvc.perform(get("/abcde"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        void tooShortCode_returns404() throws Exception {
+            mockMvc.perform(get("/abc"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    // --- Helpers ---
+
+    private org.springframework.test.web.servlet.ResultActions performShorten(String url) throws Exception {
+        String payload = "{\"url\": \"" + url + "\"}";
+        return mockMvc.perform(post("/api/shorten")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payload));
+    }
+
+    private String shortenAndExtractCode(String originalUrl) throws Exception {
+        MvcResult result = performShorten(originalUrl)
                 .andExpect(status().isOk())
                 .andReturn();
-
-        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.has("shortUrl")).isTrue();
-        String shortUrl = body.get("shortUrl").asText();
-        assertThat(shortUrl).startsWith("http://localhost:8080/");
+        String shortUrl = parseBody(result).get("shortUrl").asText();
+        return extractCode(shortUrl);
     }
 
-    @Test
-    void shorten_missingUrl_returnsBadRequest() throws Exception {
-        String payload = "{}";
-
-        MvcResult result = mockMvc.perform(post("/api/shorten")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isBadRequest())
-                .andReturn();
-
-        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.get("message").asText()).isEqualTo("URL is required");
+    private JsonNode parseBody(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString());
     }
 
-    @Test
-    void shorten_invalidUrl_returnsBadRequestWithMessage() throws Exception {
-        String payload = "{\"url\": \"javascript:alert(1)\"}";
-
-        MvcResult result = mockMvc.perform(post("/api/shorten")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isBadRequest())
-                .andReturn();
-
-        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.get("message").asText()).isEqualTo("Invalid input");
-    }
-
-    @Test
-    void redirect_knownCode_returnsFoundAndLocation() throws Exception {
-        String original = "https://example.com/page";
-        String payload = "{\"url\": \"" + original + "\"}";
-
-        // create short url
-        MvcResult shorten = mockMvc.perform(post("/api/shorten")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isOk())
-                .andReturn();
-
-        JsonNode body = objectMapper.readTree(shorten.getResponse().getContentAsString());
-        String shortUrl = body.get("shortUrl").asText();
-        String code = shortUrl.substring(shortUrl.lastIndexOf('/') + 1);
-
-        // request redirect
-        mockMvc.perform(get("/" + code))
-                .andExpect(status().isFound())
-                .andExpect(header().string("Location", original));
-    }
-
-    @Test
-    void redirect_unknownCode_returnsNotFound() throws Exception {
-        mockMvc.perform(get("/zzzz"))
-                .andExpect(status().isNotFound());
+    private String extractCode(String shortUrl) {
+        return shortUrl.substring(shortUrl.lastIndexOf('/') + 1);
     }
 }
