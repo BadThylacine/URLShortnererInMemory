@@ -35,7 +35,8 @@ Optional (requires a persistent database):
 mvn spring-boot:run
 ```
 
-Open [http://localhost:8080](http://localhost:8080), enter a URL (e.g. `https://example.com/page`), and submit. The shortened link is displayed on the page. Click it, or open it in a new tab, to be redirected.
+Open [http://localhost:8080](http://localhost:8080), enter a URL (e.g. `https://example.com/page`), and submit. 
+The shortened link is displayed on the page. Click it, or open it in a new tab, to be redirected.
 
 ---
 
@@ -88,10 +89,14 @@ When deploying behind a proxy or on a public host, set `app.base-url` to the pub
 
 ```
 src/
-  app.UrlShortenerApplication.java     # Spring Boot entry point
+  app/
+    UrlShortenerApplication.java   # Spring Boot entry point
   controller/
     UrlShortenerController.java    # REST API (/api/shorten)
     RedirectController.java        # Short-link redirects (GET /{code})
+    ShortenRequest.java            # Request DTO for shortening
+    ShortenResponse.java           # Response DTO for shortened URL
+    ErrorResponse.java             # Error response DTO
   service/
     UrlShortenerService.java       # Shortening logic and in-memory store
   main/resources/

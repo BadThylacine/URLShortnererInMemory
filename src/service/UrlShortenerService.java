@@ -26,52 +26,61 @@ public class UrlShortenerService {
     private final Map<String, String> urlToCode = new ConcurrentHashMap<>();
     private final AtomicLong counter = new AtomicLong(1);
 
+    // Initialises the service, injecting and normalising the configured base URL.
     public UrlShortenerService(@Value("${app.base-url:http://localhost:8080}") String baseUrl) {
         this.baseUrl = normalizeBaseUrl(baseUrl);
     }
 
+    // Validates and shortens a URL,
+    // reusing an existing code if already assigned,
+    // or returning an error if input is invalid or capacity is exceeded.
     public String shortenUrl(String originalUrl) {
         if (!isValidUrl(originalUrl)) {
             return "Error: Invalid input";
         }
 
-        // Fast-path: if already present, return immediately
         String existingCode = urlToCode.get(originalUrl);
         if (existingCode != null) {
             return baseUrl + existingCode;
         }
 
-        // Ensure only one code is generated for a given originalUrl under concurrency
-        String code = urlToCode.computeIfAbsent(originalUrl, key -> {
-            String newCode;
-            // generate a code and ensure there is no collision in codeToUrl
-            do {
-                newCode = generateCode();
-                // try to reserve the code; if someone else took it, retry
-            } while (codeToUrl.putIfAbsent(newCode, key) != null);
-            return newCode;
-        });
-
-        return baseUrl + code;
+        try {
+            String code = urlToCode.computeIfAbsent(originalUrl, key -> {
+                String newCode;
+                do {
+                    newCode = generateCode();
+                } while (codeToUrl.putIfAbsent(newCode, key) != null);
+                return newCode;
+            });
+            return baseUrl + code;
+        } catch (IllegalStateException e) {
+            return "Error: URL shortener capacity exceeded";
+        }
     }
 
+    // Looks up the original URL for a given short code,
+    // returning null if the code is invalid or unknown.
     public String resolveByCode(String code) {
         if (!isValidCode(code)) return null;
         return codeToUrl.get(code);
     }
 
+    // Generates the next short code by encoding the counter value,
+    // padding to CODE_LENGTH, and asserting the result fits.
     private String generateCode() {
         long id = counter.getAndIncrement();
-        String code = toBase62(id);
+        String code = toBase66(id);
 
-        // Pad with leading 'a' (zero in Base62) to ensure fixed length
-        while (code.length() < CODE_LENGTH) {
-            code = CHARS.charAt(0) + code;
+        int paddingNeeded = CODE_LENGTH - code.length();
+        if (paddingNeeded < 0) {
+            throw new IllegalStateException("Code generated exceeds defined length");
         }
-        return code;
+
+        return "a".repeat(paddingNeeded) + code;
     }
 
-    private String toBase62(long id) {
+    // Converts a numeric ID to a base-66 string using the defined character set.
+    private String toBase66(long id) {
         if (id == 0) return String.valueOf(CHARS.charAt(0));
 
         StringBuilder code = new StringBuilder();
@@ -82,6 +91,8 @@ public class UrlShortenerService {
         return code.reverse().toString();
     }
 
+    // Returns true only if the code is non-null, exactly CODE_LENGTH characters,
+    // and composed entirely of allowed characters.
     private boolean isValidCode(String code) {
         if (code == null || code.length() != CODE_LENGTH) return false;
         for (char c : code.toCharArray()) {
@@ -90,6 +101,8 @@ public class UrlShortenerService {
         return true;
     }
 
+    // Returns true only if the URL is non-blank, syntactically valid,
+    // and uses an http or https scheme with a present host.
     private boolean isValidUrl(String fullUrl) {
         if (fullUrl == null || fullUrl.isBlank()) return false;
         try {
@@ -104,6 +117,7 @@ public class UrlShortenerService {
         }
     }
 
+    // Ensures the base URL is non-blank and always ends with a trailing slash.
     private static String normalizeBaseUrl(String baseUrl) {
         if (baseUrl == null || baseUrl.isBlank()) return "http://localhost:8080/";
         return baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
