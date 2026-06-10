@@ -16,10 +16,6 @@ public class UrlShortenerController {
         this.service = service;
     }
 
-    public String createShortUrl(String originalUrl) {
-        return service.shortenUrl(originalUrl);
-    }
-
     @PostMapping("/shorten")
     public ResponseEntity<?> shortenUrl(@RequestBody ShortenRequest request) {
         String url = request.url();
@@ -27,7 +23,7 @@ public class UrlShortenerController {
             return ResponseEntity.badRequest().body(new ErrorResponse("URL is required"));
         }
 
-        String shortUrl = createShortUrl(url.trim());
+        String shortUrl = service.shortenUrl(url.trim());
         if (shortUrl.startsWith("Error:")) {
             return ResponseEntity.badRequest().body(new ErrorResponse(shortUrl.substring(7).trim()));
         }
