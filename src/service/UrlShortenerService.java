@@ -2,6 +2,8 @@ package service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import service.exception.InvalidUrlException;
+import service.exception.UrlShortenerCapacityExceededException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -36,7 +38,7 @@ public class UrlShortenerService {
     // or returning an error if input is invalid or capacity is exceeded.
     public String shortenUrl(String originalUrl) {
         if (!isValidUrl(originalUrl)) {
-            return "Error: Invalid input";
+            throw new InvalidUrlException("Invalid input");
         }
 
         String existingCode = urlToCode.get(originalUrl);
@@ -54,7 +56,7 @@ public class UrlShortenerService {
             });
             return baseUrl + code;
         } catch (IllegalStateException e) {
-            return "Error: URL shortener capacity exceeded";
+            throw new UrlShortenerCapacityExceededException("URL shortener capacity exceeded");
         }
     }
 

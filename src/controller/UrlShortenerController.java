@@ -1,5 +1,6 @@
 package controller;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,16 +18,8 @@ public class UrlShortenerController {
     }
 
     @PostMapping("/shorten")
-    public ResponseEntity<?> shortenUrl(@RequestBody ShortenRequest request) {
-        String url = request.url();
-        if (url == null || url.isBlank()) {
-            return ResponseEntity.badRequest().body(new ErrorResponse("URL is required"));
-        }
-
-        String shortUrl = service.shortenUrl(url.trim());
-        if (shortUrl.startsWith("Error:")) {
-            return ResponseEntity.badRequest().body(new ErrorResponse(shortUrl.substring(7).trim()));
-        }
+    public ResponseEntity<ShortenResponse> shortenUrl(@Valid @RequestBody ShortenRequest request) {
+        String shortUrl = service.shortenUrl(request.url().trim());
         return ResponseEntity.ok(new ShortenResponse(shortUrl));
     }
 }

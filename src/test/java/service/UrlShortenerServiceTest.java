@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import service.UrlShortenerService;
+import service.exception.InvalidUrlException;
 
 import java.util.Collections;
 import java.util.Set;
@@ -96,7 +97,9 @@ class UrlShortenerServiceTest {
                 "http//missing-colon.com"
         })
         void invalidOrUnsafeUrl_returnsError(String input) {
-            assertEquals("Error: Invalid input", service.shortenUrl(input));
+            InvalidUrlException exception = assertThrows(InvalidUrlException.class,
+                    () -> service.shortenUrl(input));
+            assertEquals("Invalid input", exception.getMessage());
         }
 
         @ParameterizedTest(name = "accepts scheme: {0}")

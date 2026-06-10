@@ -6,6 +6,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import service.UrlShortenerService;
+import service.exception.InvalidUrlException;
+import service.exception.UrlShortenerCapacityExceededException;
 
 @Controller
 public class PageController {
@@ -32,13 +34,13 @@ public class PageController {
             return "index";
         }
 
-        String shortUrl = service.shortenUrl(submittedUrl);
-        if (shortUrl.startsWith("Error:")) {
-            model.addAttribute("errorMessage", shortUrl.substring(7).trim());
+        try {
+            String shortUrl = service.shortenUrl(submittedUrl);
+            model.addAttribute("shortUrl", shortUrl);
+        } catch (InvalidUrlException | UrlShortenerCapacityExceededException ex) {
+            model.addAttribute("errorMessage", ex.getMessage());
             return "index";
         }
-
-        model.addAttribute("shortUrl", shortUrl);
         return "index";
     }
 }
